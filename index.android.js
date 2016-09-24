@@ -9,15 +9,26 @@ import {
   AppRegistry,
   StyleSheet,
   Text,
-  View
+  View,
+    DeviceEventEmitter
 } from 'react-native';
+
+var mSensorManager = require('NativeModules').SensorManager;
+
+mSensorManager.startAccelerometer(100);
+
+console.log('hello world!');
+DeviceEventEmitter.addListener('Accelerometer', function(data) {
+    // console.log(data);
+});
+// mSensorManager.stopAccelerometer();
 
 class CacheBaches extends Component {
   render() {
     return (
       <View style={styles.container}>
         <Text style={styles.welcome}>
-          Welcome to React Native!
+            Bienvendo al Cache Baches!
         </Text>
         <Text style={styles.instructions}>
           To get started, edit index.android.js
