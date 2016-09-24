@@ -18,6 +18,12 @@ import MapView from 'react-native-maps';
 
 var mSensorManager = require('NativeModules').SensorManager;
 
+const typeToColor = new Map([
+    [0, '#0000ff'],
+    [1, '#ffa500'],
+    [2, '#ffff00'],
+    [3, '#ff0000']
+]);
 
 class CacheBaches extends Component {
 
@@ -31,7 +37,10 @@ class CacheBaches extends Component {
         newPotholeVisible: false,
         potholeQuestionVisible: false,
         potholes: [],
-        currentPothole: null
+        currentPothole: null,
+        thanksModalVisible: false,
+        manualPothole: null,
+        confirmManualPotholeVisible: false
     }
 
     setPotholeQuestionVisible(visible) {
@@ -46,6 +55,14 @@ class CacheBaches extends Component {
         this.setState({newPotholeVisible: visible})
     }
 
+    setThanksModalVisible(visible) {
+        if(visible) {
+            this.setState({newPotholeVisible: false});
+        }
+
+        this.setState({thanksModalVisible: visible});
+    }
+
     setCurrentPothole() {
         navigator.geolocation.getCurrentPosition(
             (position) => {
@@ -56,14 +73,60 @@ class CacheBaches extends Component {
                 this.setState({currentPothole});
 
                 this.setPotholeQuestionVisible(true);
+
             },
             (error) => alert(JSON.stringify(error)),
             {enableHighAccuracy: true, timeout: 20000, maximumAge: 1000}
         );
     }
 
-    saveCurrentPothole() {
+    saveCurrentPothole(potholeType) {
+        let pothole = this.state.currentPothole;
+        pothole.potholeType = potholeType;
+        this.setState({potholes: this.state.potholes.concat(pothole)});
+        this.setNewPotholeVisible(false);
 
+        this.setState({currentPosition: {
+            latitude: pothole.latitude,
+            longitude: pothole.longitude,
+            latitudeDelta: 0.10,
+            longitudeDelta: 0.10,
+        }});
+
+        this.setThanksModalVisible(true);
+    }
+
+    createManualPothole(coordinate) {
+        this.setState({currentPosition: {
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude,
+            latitudeDelta: 0,
+            longitudeDelta: 0,
+        }});
+
+        this.setState({manualPothole: {
+            latitude: coordinate.latitude,
+            longitude: coordinate.longitude,
+        }});
+
+        this.setState({confirmManualPotholeVisible: true});
+    }
+
+    manualPotholeConfirmed() {
+        this.setState({confirmManualPotholeVisible: false});
+
+        this.setState({currentPothole: this.state.manualPothole});
+
+        this.setNewPotholeVisible(true);
+
+        this.setState({manualPothole: null});
+    }
+
+    manualPotholeCanceled() {
+
+        this.setState({confirmManualPotholeVisible: false});
+
+        this.setState({manualPothole: null});
     }
 
     componentDidMount() {
@@ -72,8 +135,8 @@ class CacheBaches extends Component {
                 var currentPosition = {
                     latitude: position.coords.latitude,
                     longitude: position.coords.longitude,
-                    latitudeDelta: 0,
-                    longitudeDelta: 0,
+                    latitudeDelta: 0.10,
+                    longitudeDelta: 0.10,
                 }
                 this.setState({currentPosition})
             },
@@ -86,7 +149,7 @@ class CacheBaches extends Component {
 
         DeviceEventEmitter.addListener('Accelerometer', (data) => {
 
-            if(this.state.newPotholeVisible) {
+            if(this.state.newPotholeVisible || this.state.potholeQuestionVisible) {
                 return;
             }
 
@@ -120,12 +183,80 @@ class CacheBaches extends Component {
         return (
             <View style={styles.container}>
 
+                <View style={styles.counter}>
+                    <Text style={{ color: '#fff', fontSize: 20 }}>{ this.state.potholes.length }</Text>
+                </View>
+
                 <MapView
                     style={styles.map}
                     showsUserLocation={true}
                     followsUserLocation={true}
                     region={this.state.currentPosition}
-                />
+                    onPress={(data) => { this.createManualPothole(data.nativeEvent.coordinate); }}
+                >
+                    {this.state.manualPothole &&
+                        <MapView.Marker
+                            coordinate={{
+                                latitude: this.state.manualPothole.latitude,
+                                longitude: this.state.manualPothole.longitude,
+                            }}
+                        />
+                    }
+
+                    {this.state.potholes.map(pothole => (
+                        <MapView.Marker
+                            coordinate={{
+                                latitude: pothole.latitude,
+                                longitude: pothole.longitude
+                            }}
+                            title="My Title"
+                            description="My description"
+                            pinColor={typeToColor.get(pothole.potholeType)}
+                        />
+                    ))}
+                </MapView>
+
+                <Modal
+                    animationType={"slide"}
+                    transparent={true}
+                    visible={this.state.confirmManualPotholeVisible}
+                    onRequestClose={() => {  }}
+                >
+                    <View style={styles.questionMenu}>
+                        <TouchableHighlight
+                            style={[styles.green, styles.confirmManualMenuItem]}
+                            onPress={() => { this.manualPotholeConfirmed() }}
+                        >
+                            <Text style={{ color: '#fff', fontSize: 23 }}>GUARDAR</Text>
+                        </TouchableHighlight>
+
+                        <TouchableHighlight
+                            style={[styles.red, styles.confirmManualMenuItem]}
+                            onPress={() => { this.manualPotholeCanceled() }}
+                        >
+                            <Text style={{ color: '#fff', fontSize: 23 }}>DESCARTAR</Text>
+                        </TouchableHighlight>
+
+                    </View>
+                </Modal>
+
+                <Modal
+                    animationType={"slide"}
+                    transparent={false}
+                    visible={this.state.thanksModalVisible}
+                    onRequestClose={() => {  }}
+                >
+                    <View style={{flex: 1, flexDirection: 'column', alignItems: 'center', justifyContent: 'center'}}>
+                        <Text style={{fontSize: 30}}>GRACIAS POR TU REPORTE :)</Text>
+                        <Text style={{fontSize: 23}}>¡Acabas de ganar 100 bachepuntos!</Text>
+                        <TouchableHighlight
+                            style={{ backgroundColor: '#ADD8E6'}}
+                            onPress={() => { this.setState({thanksModalVisible: false}) }}
+                        >
+                            <Text style={{ color: '#fff', fontSize: 40 }}>Regresar</Text>
+                        </TouchableHighlight>
+                    </View>
+                </Modal>
 
                 <Modal
                     animationType={"slide"}
@@ -169,7 +300,7 @@ class CacheBaches extends Component {
 
                         <View style={styles.menuContainer}>
                             <TouchableHighlight onPress={() => {
-
+                                this.saveCurrentPothole(0);
                             }}
                                 style={[styles.blue, styles.menuItem]}
                             >
@@ -177,6 +308,7 @@ class CacheBaches extends Component {
                             </TouchableHighlight>
 
                             <TouchableHighlight onPress={() => {
+                                this.saveCurrentPothole(1);
                             }}
                                 style={[styles.orange, styles.menuItem]}
                             >
@@ -184,6 +316,7 @@ class CacheBaches extends Component {
                             </TouchableHighlight>
 
                             <TouchableHighlight onPress={() => {
+                                this.saveCurrentPothole(2);
                             }}
                                 style={[styles.yellow, styles.menuItem]}
                             >
@@ -191,6 +324,7 @@ class CacheBaches extends Component {
                             </TouchableHighlight>
 
                             <TouchableHighlight onPress={() => {
+                                this.saveCurrentPothole(3);
                             }}
                                 style={[styles.red, styles.menuItem]}
                             >
@@ -210,12 +344,12 @@ const styles = StyleSheet.create({
     container: {
         flex: 1,
     },
-    welcome: {
+    counter: {
         margin: 10,
-        backgroundColor: 'red',
+        backgroundColor: 'blue',
         elevation: 3,
         height: 30,
-        width: 50
+        width: 30
     },
     map: {
         ...StyleSheet.absoluteFillObject,
@@ -237,6 +371,9 @@ const styles = StyleSheet.create({
         fontSize: 22,
         color: 'white'
     },
+    green: {
+        backgroundColor: 'green'
+    },
     blue: {
         backgroundColor: 'blue'
     },
@@ -251,14 +388,22 @@ const styles = StyleSheet.create({
     },
     questionMenu: {
         flex:1,
+        flexDirection: 'row',
         justifyContent: 'center',
-        alignItems: 'center'
+        alignItems: 'center',
     },
     questionMenuYes: {
         backgroundColor: 'red'
     },
     questionMenuNo: {
         backgroundColor: 'green'
+    },
+    confirmManualMenuItem: {
+        flex: 1,
+        margin: 20,
+        padding: 5,
+        alignItems: 'center',
+        justifyContent: 'center'
     }
 });
 
